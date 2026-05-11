@@ -11,11 +11,13 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
+      # 1. 升级到 checkout v6（已经基于 node24 运行时）
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6  # ← 从 v4 改为 v6
 
+      # 2. 升级到 setup-python v6（已升级到 Node 24 兼容依赖）
       - name: 安装 Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6  # ← 从 v5 改为 v6
         with:
           python-version: '3.11'
 
@@ -35,3 +37,4 @@ jobs:
           git add data.json
           git diff --staged --quiet || git commit -m "更新资金流向数据 $(date +%Y-%m-%d)"
           git push
+
