@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A股市场资金流向 · 数据中台</title>
+<!-- ECharts -->
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+/* ── 全局重置 ─────────────────────────────── */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: #0a0e27;
+    color: #d0d7e8;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* ── 顶部栏 ──────────────────────────────── */
+.header {
+    background: linear-gradient(135deg, #0d1333 0%, #111940 100%);
+    border-bottom: 1px solid rgba(0, 200, 255, 0.15);
+    padding: 16px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    background: linear-gradient(90deg, #00d4ff, #7b68ee);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: 2px;
+}
+.header .update-info {
+    font-size: 13px;
+    color: #6b7a99;
+}
+.header .update-info span {
+    color: #00d4ff;
+    font-weight: 600;
+}
+
+/* ── 主体网格 ────────────────────────────── */
+.dashboard {
+    padding: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto auto;
+    gap: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+/* ── 卡片通用 ────────────────────────────── */
+.card {
+    background: linear-gradient(180deg, #111940 0%, #0d1333 100%);
+    border: 1px solid rgba(0, 200, 255, 0.1);
+    border-radius: 8px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+}
+.card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #00d4ff, transparent);
+    opacity: 0.5;
+}
+.card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #8899bb;
+    margin-bottom: 16px;
+    padding-left: 10px;
+    border-left: 3px solid #00d4ff;
+    letter-spacing: 1px;
+}
+
+/* ── 概览区（跨两列） ────────────────────── */
+.summary-row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+}
+.summary-item {
+    background: linear-gradient(180deg, #111940 0%, #0d1333 100%);
+    border: 1px solid rgba(0, 200, 255, 0.1);
+    border-radius: 8px;
+    padding: 18px 16px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+.summary-item::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+}
+.summary-item.positive::before { background: linear-gradient(90deg, transparent, #ff4d4f, transparent); }
+.summary-item.negative::before { background: linear-gradient(90deg, transparent, #00e676, transparent); }
+.summary-item.neutral::before { background: linear-gradient(90deg, transparent, #00d4ff, transparent); }
+.summary-label {
+    font-size: 13px;
+    color: #6b7a99;
+    margin-bottom: 8px;
+}
+.summary-value {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+.summary-value.red { color: #ff4d4f; }
+.summary-value.green { color: #00e676; }
+.summary-value.cyan { color: #00d4ff; }
+.summary-unit {
+    font-size: 12px;
+    color: #556688;
+    margin-top: 4px;
+}
+
+/* ── 图表容器 ────────────────────────────── */
+.chart-box { height: 340px; }
+
+/* ── 表格 ────────────────────────────────── */
+.table-wrap {
+    max-height: 360px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #1a2555 #0a0e27;
+}
+.table-wrap::-webkit-scrollbar { width: 5px; }
+.table-wrap::-webkit-scrollbar-thumb { background: #1a2555; border-radius: 3px; }
+.table-wrap::-webkit-scrollbar-track { background: #0a0e27; }
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+thead th {
+    position: sticky;
+    top: 0;
+    background: #111940;
+    color: #6b8ab5;
+    font-weight: 600;
+    padding: 8px 6px;
+    text-align: center;
+    border-bottom: 1px solid rgba(0, 200, 255, 0.15);
+    z-index: 1;
+}
+tbody td {
+    padding: 7px 6px;
+    text-align: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+tbody tr:hover { background: rgba(0, 200, 255, 0.04); }
+.text-red { color: #ff4d4f; }
+.text-green { color: #00e676; }
+
+/* ── 加载动画 ────────────────────────────── */
+.loading {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 80px 0;
+    font-size: 16px;
+    color: #4a5a80;
+}
+.loading .spinner {
+    display: inline-block;
+    width: 36px; height: 36px;
+    border: 3px solid rgba(0, 200, 255, 0.2);
+    border-top-color: #00d4ff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── 错误提示 ────────────────────────────── */
+.error-box {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 60px 20px;
+    color: #ff6b6b;
+}
+.error-box .icon { font-size: 48px; margin-bottom: 12px; }
+.error-box .msg { font-size: 14px; color: #6b7a99; margin-top: 8px; }
+
+/* ── 底部 ────────────────────────────────── */
+.footer {
+    text-align: center;
+    padding: 20px;
+    color: #3a4a66;
+    font-size: 12px;
+}
+
+/* ── 响应式 ──────────────────────────────── */
+@media (max-width: 1024px) {
+    .summary-row { grid-template-columns: repeat(3, 1fr); }
+    .dashboard { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+    .summary-row { grid-template-columns: repeat(2, 1fr); }
+    .header { padding: 12px 16px; }
+    .header h1 { font-size: 18px; }
+    .dashboard { padding: 12px; gap: 12px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── 顶部栏 ──────────────────────────────── -->
+<div class="header">
+    <h1>A股市场资金流向 · 数据中台</h1>
+    <div class="update-info">
+        数据更新时间：<span id="updateTime">加载中...</span>
+    </div>
+</div>
+
+<!-- ── 主面板 ──────────────────────────────── -->
+<div class="dashboard" id="dashboard">
+
+    <!-- 加载状态 -->
+    <div class="loading" id="loadingBox">
+        <div><div class="spinner"></div></div>
+        <div>正在加载数据，请稍候...</div>
+    </div>
+
+</div>
+
+<!-- ── 底部 ────────────────────────────────── -->
+<div class="footer">
+    数据来源：东方财富 · 本页面自动读取 data.json，刷新页面即可更新
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// 工具函数
+// ─────────────────────────────────────────────
+function formatNum(val, digits) {
+    if (val === null || val === undefined || val === "--") return "--";
+    digits = digits !== undefined ? digits : 2;
+    var num = parseFloat(val);
+    if (isNaN(num)) return "--";
+    return num.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function colorByValue(val) {
+    if (val === null || val === undefined || val === "--") return "";
+    var num = parseFloat(val);
+    if (isNaN(num)) return "";
+    return num > 0 ? "text-red" : num < 0 ? "text-green" : "";
+}
+
+function signNum(val) {
+    if (val === null || val === undefined || val === "--") return "--";
+    var num = parseFloat(val);
+    if (isNaN(num)) return "--";
+    return (num > 0 ? "+" : "") + num.toFixed(2);
+}
+
+// ─────────────────────────────────────────────
+// 渲染页面
+// ─────────────────────────────────────────────
+function renderDashboard(data) {
+    var dash = document.getElementById("dashboard");
+    dash.innerHTML = "";
+
+    // 1. 更新时间
+    document.getElementById("updateTime").textContent = data.update_time || "--";
+
+    var summary = data.market_summary || {};
+
+    // 2. 概览卡片行
+    var summaryHTML = '<div class="summary-row">';
+    var items = [
+        { label: "主力净流入", value: summary["主力净流入合计(亿元)"], unit: "亿元", cls: "positive", vcls: "red" },
+        { label: "超大单净流入", value: summary["超大单净流入合计(亿元)"], unit: "亿元", cls: "positive", vcls: "red" },
+        { label: "大单净流入", value: summary["大单净流入合计(亿元)"], unit: "亿元", cls: "positive", vcls: "red" },
+        { label: "上涨家数", value: summary["上涨家数"], unit: "家", cls: "positive", vcls: "red", digits: 0 },
+        { label: "下跌家数", value: summary["下跌家数"], unit: "家", cls: "negative", vcls: "green", digits: 0 },
+    ];
+    items.forEach(function(it) {
+        var v = it.value;
+        var displayVal = (v !== undefined && v !== null) ? formatNum(v, it.digits) : "--";
+        // 主力/超大单/大单 根据正负变色
+        if (it.label.indexOf("净流入") > -1 && v !== undefined && v !== null) {
+            it.vcls = parseFloat(v) >= 0 ? "red" : "green";
+        }
+        summaryHTML += '<div class="summary-item ' + it.cls + '">' +
+            '<div class="summary-label">' + it.label + '</div>' +
+            '<div class="summary-value ' + it.vcls + '">' + displayVal + '</div>' +
+            '<div class="summary-unit">' + it.unit + '</div>' +
+            '</div>';
+    });
+    summaryHTML += '</div>';
+    dash.innerHTML += summaryHTML;
+
+    // 3. 全市场历史趋势（跨两列）
+    dash.innerHTML += '<div class="card" style="grid-column:1/-1"><div class="card-title">全市场资金流向趋势（近30日）</div><div id="chartHistory" class="chart-box" style="height:300px"></div></div>';
+
+    // 4. 行业板块
+    dash.innerHTML += '<div class="card"><div class="card-title">行业板块资金流向 TOP20</div><div id="chartIndustry" class="chart-box"></div></div>';
+
+    // 5. 概念板块
+    dash.innerHTML += '<div class="card"><div class="card-title">概念板块资金流向 TOP20</div><div id="chartConcept" class="chart-box"></div></div>';
+
+    // 6. 主力净流入 TOP10
+    dash.innerHTML += '<div class="card"><div class="card-title">个股主力净流入 TOP10</div><div class="table-wrap">' + buildStockTable(data.top_stocks_inflow || []) + '</div></div>';
+
+    // 7. 主力净流出 TOP10
+    dash.innerHTML += '<div class="card"><div class="card-title">个股主力净流出 TOP10</div><div class="table-wrap">' + buildStockTable(data.top_stocks_outflow || []) + '</div></div>';
+
+    // ── 初始化图表 ──
+    setTimeout(function() {
+        initHistoryChart(data.market_history || {});
+        initSectorChart("chartIndustry", data.industry_flow || [], "行业");
+        initSectorChart("chartConcept", data.concept_flow || [], "概念");
+    }, 100);
+}
+
+// ─────────────────────────────────────────────
+// 个股表格
+// ─────────────────────────────────────────────
+function buildStockTable(rows) {
+    if (!rows.length) return '<div style="text-align:center;color:#4a5a80;padding:30px">暂无数据</div>';
+    var html = '<table><thead><tr>' +
+        '<th>排名</th><th>代码</th><th>名称</th><th>最新价</th><th>涨跌幅</th><th>主力净流入</th><th>主力占比</th><th>超大单净流入</th>' +
+        '</tr></thead><tbody>';
+    rows.forEach(function(r) {
+        var chgCls = colorByValue(r["涨跌幅(%)"]);
+        var mainCls = colorByValue(r["主力净流入(亿元)"]);
+        var bigCls = colorByValue(r["超大单净流入(亿元)"]);
+        html += '<tr>' +
+            '<td>' + (r["排名"] || "--") + '</td>' +
+            '<td>' + (r["股票代码"] || "--") + '</td>' +
+            '<td style="color:#00d4ff">' + (r["股票名称"] || "--") + '</td>' +
+            '<td>' + formatNum(r["最新价(元)"]) + '</td>' +
+            '<td class="' + chgCls + '">' + signNum(r["涨跌幅(%)"]) + '</td>' +
+            '<td class="' + mainCls + '">' + signNum(r["主力净流入(亿元)"]) + '</td>' +
+            '<td class="' + mainCls + '">' + signNum(r["主力净流入占比(%)"]) + '</td>' +
+            '<td class="' + bigCls + '">' + signNum(r["超大单净流入(亿元)"]) + '</td>' +
+            '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+}
+
+// ─────────────────────────────────────────────
+// 历史趋势图
+// ─────────────────────────────────────────────
+function initHistoryChart(hist) {
+    var chart = echarts.init(document.getElementById("chartHistory"));
+    var option = {
+        tooltip: {
+            trigger: "axis",
+            backgroundColor: "rgba(13,19,51,0.95)",
+            borderColor: "#00d4ff",
+            textStyle: { color: "#d0d7e8", fontSize: 12 }
+        },
+        legend: {
+            top: 0,
+            textStyle: { color: "#6b8ab5", fontSize: 12 },
+            itemWidth: 14, itemHeight: 3
+        },
+        grid: { top: 40, bottom: 30, left: 55, right: 20 },
+        xAxis: {
+            type: "category",
+            data: hist.dates || [],
+            axisLine: { lineStyle: { color: "#1a2555" } },
+            axisLabel: { color: "#4a5a80", fontSize: 10, rotate: 30 },
+            splitLine: { show: false }
+        },
+        yAxis: {
+            type: "value",
+            name: "亿元",
+            nameTextStyle: { color: "#4a5a80" },
+            axisLine: { show: false },
+            axisLabel: { color: "#4a5a80", fontSize: 11 },
+            splitLine: { lineStyle: { color: "rgba(0,200,255,0.06)" } }
+        },
+        series: [
+            {
+                name: "主力净流入",
+                type: "line",
+                data: hist["主力净流入"] || [],
+                smooth: true,
+                symbol: "none",
+                lineStyle: { width: 2.5, color: "#ff4d4f" },
+                areaStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: "rgba(255,77,79,0.25)" },
+                        { offset: 1, color: "rgba(255,77,79,0.01)" }
+                    ])
+                }
+            },
+            {
+                name: "超大单净流入",
+                type: "line",
+                data: hist["超大单净流入"] || [],
+                smooth: true,
+                symbol: "none",
+                lineStyle: { width: 2, color: "#ffa940" }
+            },
+            {
+                name: "大单净流入",
+                type: "line",
+                data: hist["大单净流入"] || [],
+                smooth: true,
+                symbol: "none",
+                lineStyle: { width: 2, color: "#7b68ee" }
+            },
+            {
+                name: "中单净流入",
+                type: "line",
+                data: hist["中单净流入"] || [],
+                smooth: true,
+                symbol: "none",
+                lineStyle: { width: 1.5, color: "#36cfc9" }
+            },
+            {
+                name: "小单净流入",
+                type: "line",
+                data: hist["小单净流入"] || [],
+                smooth: true,
+                symbol: "none",
+                lineStyle: { width: 1.5, color: "#00e676" }
+            }
+        ]
+    };
+    chart.setOption(option);
+    window.addEventListener("resize", function() { chart.resize(); });
+}
+
+// ─────────────────────────────────────────────
+// 板块横向柱状图
+// ─────────────────────────────────────────────
+function initSectorChart(domId, rows, label) {
+    var chart = echarts.init(document.getElementById(domId));
+    if (!rows.length) {
+        chart.setOption({
+            title: { text: "暂无数据", left: "center", top: "center",
+                textStyle: { color: "#4a5a80", fontSize: 14 } }
+        });
+        return;
+    }
+    // 按主力净流入升序排列（ECharts 横向柱状图从下到上）
+    var sorted = rows.slice().sort(function(a, b) {
+        return (parseFloat(a["主力净流入(亿元)"]) || 0) - (parseFloat(b["主力净流入(亿元)"]) || 0);
+    });
+    var names = sorted.map(function(r) { return r["板块名称"] || "--"; });
+    var values = sorted.map(function(r) { return parseFloat(r["主力净流入(亿元)"]) || 0; });
+
+    var option = {
+        tooltip: {
+            trigger: "axis",
+            axisPointer: { type: "shadow" },
+            backgroundColor: "rgba(13,19,51,0.95)",
+            borderColor: "#00d4ff",
+            textStyle: { color: "#d0d7e8", fontSize: 12 },
+            formatter: function(params) {
+                var p = params[0];
+                var val = p.value;
+                var color = val >= 0 ? "#ff4d4f" : "#00e676";
+                return '<b>' + p.name + '</b><br/>主力净流入：<span style="color:' + color + '">' + signNum(val) + ' 亿元</span>';
+            }
+        },
+        grid: { top: 10, bottom: 20, left: 90, right: 30 },
+        xAxis: {
+            type: "value",
+            name: "亿元",
+            nameTextStyle: { color: "#4a5a80" },
+            axisLabel: { color: "#4a5a80", fontSize: 11 },
+            splitLine: { lineStyle: { color: "rgba(0,200,255,0.06)" } }
+        },
+        yAxis: {
+            type: "category",
+            data: names,
+            axisLine: { lineStyle: { color: "#1a2555" } },
+            axisLabel: { color: "#8899bb", fontSize: 11 }
+        },
+        series: [{
+            type: "bar",
+            data: values.map(function(v) {
+                return {
+                    value: v,
+                    itemStyle: {
+                        color: v >= 0
+                            ? new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                                { offset: 0, color: "#ff4d4f" }, { offset: 1, color: "#ff7875" }
+                              ])
+                            : new echarts.graphic.LinearGradient(1, 0, 0, 0, [
+                                { offset: 0, color: "#00e676" }, { offset: 1, color: "#52c41a" }
+                              ]),
+                        borderRadius: v >= 0 ? [0, 3, 3, 0] : [3, 0, 0, 3]
+                    }
+                };
+            }),
+            barMaxWidth: 16
+        }]
+    };
+    chart.setOption(option);
+    window.addEventListener("resize", function() { chart.resize(); });
+}
+
+// ─────────────────────────────────────────────
+// 加载数据
+// ─────────────────────────────────────────────
+function loadData() {
+    fetch("data.json")
+        .then(function(res) {
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            return res.json();
+        })
+        .then(function(data) {
+            renderDashboard(data);
+        })
+        .catch(function(err) {
+            var dash = document.getElementById("dashboard");
+            dash.innerHTML =
+                '<div class="error-box">' +
+                '<div class="icon">⚠</div>' +
+                '<div style="font-size:18px">数据加载失败</div>' +
+                '<div class="msg">' +
+                '无法读取 data.json 文件。<br>' +
+                '请确保：<br>' +
+                '1. 已运行 python generate_data.py 生成 data.json<br>' +
+                '2. data.json 与本 HTML 在同一目录下<br>' +
+                '3. 通过本地服务器打开（如 VS Code Live Server），而非直接双击 HTML<br>' +
+                '<br>错误信息：' + err.message +
+                '</div></div>';
+        });
+}
+
+// 页面加载完成后执行
+loadData();
+
+// 每5分钟自动刷新数据
+setInterval(function() {
+    loadData();
+}, 5 * 60 * 1000);
+</script>
+
+</body>
+</html>
