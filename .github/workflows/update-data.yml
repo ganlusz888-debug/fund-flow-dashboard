@@ -1,0 +1,37 @@
+name: 每日更新资金流向数据
+
+on:
+  schedule:
+    # 每天 15:45 运行（北京时间，收盘后）
+    # UTC 时间比北京时间晚8小时，所以填 07:45
+    - cron: '45 7 * * 1-5'  # 周一到周五运行
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          pip install requests pandas
+
+      - name: 运行数据抓取
+        run: |
+          python a_share_fund_flow.py --mode daily --output output
+          python generate_data.py --output data.json
+
+      - name: 提交更新
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data.json
+          git diff --staged --quiet || git commit -m "更新资金流向数据 $(date +%Y-%m-%d)"
+          git push
